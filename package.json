@@ -1,0 +1,25 @@
+{
+  "name": "bamazon-db",
+  "version": "1.0.0",
+  "description": "",
+  "main": "bamazon.js",
+  "dependencies": {
+    "boxen": "^1.3.0",
+    "inquirer": "^6.0.0",
+    "mysql": "^2.15.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devtldn/bamazon-db.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/devtldn/bamazon-db/issues"
+  },
+  "homepage": "https://github.com/devtldn/bamazon-db#readme"
+}
