@@ -69,4 +69,3 @@ UPDATE products SET stock_quantity = 50 WHERE item_id = 3032;
 UPDATE products SET stock_quantity = 50 WHERE item_id = 3033;
 UPDATE products SET stock_quantity = 50 WHERE item_id = 3034;
 UPDATE products SET stock_quantity = 50 WHERE item_id = 3035;
-

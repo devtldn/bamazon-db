@@ -2,22 +2,6 @@ const mysql = require('mysql');
 const inquirer = require('inquirer');
 const boxen = require('boxen');
 
-
-var connection = mysql.createConnection({
-    host: "localhost",
-    port: 3306,
-    user: "root",
-    password: "",
-    database: "bamazon_db"
-});
-
-connection.connect(function (err) {
-    if (err) throw err;
-
-    resetTables();
-    welcome();
-});
-
 function bamazon() {
     console.clear();
     console.log(boxen('  ʙ  ᴀ  ᴍ  ᴀ  ᴢ  ᴏ  ɴ  ', {
@@ -44,13 +28,28 @@ function bmzn() {
     }));
 }
 
+var connection = mysql.createConnection({
+    host: "localhost",
+    port: 3306,
+    user: "root",
+    password: "",
+    database: "bamazon_db"
+});
+
+connection.connect(function (err) {
+    if (err) throw err;
+
+    resetTables();
+    welcome();
+});
+
 function welcome() {
     bamazon();
 
     inquirer.prompt([
         {
             type: 'list',
-            message: 'Welcome to Bamazon™! \n\nWhat would you like to do? \n',
+            message: 'Welcome to  ʙ ᴀ ᴍ ᴀ ᴢ ᴏ ɴ ™! \n\nWhat would you like to do? \n',
             name: 'landing',
             choices: ["Start Shopping", "Contact Us"]
         }
@@ -69,7 +68,7 @@ function contactSupp() {
     inquirer.prompt([
         {
             type: 'list',
-            message: 'Contact Us \n\nFor any inquiries, concerns, and/or feedback, feel free to contact us using our toll-free number at +1 (800) 555-5555. \n\nThank you for choosing Bamazon™ as we look forward to hearing from you soon! \n',
+            message: 'Contact Us \n\nFor any inquiries, concerns, and/or feedback, feel free to contact us using our toll-free number at +1 (800) 555-5555. \nThank you for choosing  ʙ ᴀ ᴍ ᴀ ᴢ ᴏ ɴ ™  as we look forward to hearing from you! \n',
             name: 'support',
             choices: ["Go back"]
         }
@@ -120,93 +119,229 @@ function inputItems() {
         var selectedId = parseInt(response.inputid);
         var selectedAmt = parseInt(response.inputq);
 
-        addingToCart(selectedId, selectedAmt);
+        verifyCart(selectedId, selectedAmt);
     });
 }
 
-function addingToCart(selectedId, selectedAmt) {
+function verifyCart(selectedId, selectedAmt) {
     connection.query(
-        `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
-            var newInv = parseInt(res[0].stock_quantity) - selectedAmt;
-
+        "SELECT item_id FROM products", function (err, res) {
             if (err) throw err;
 
-            if (newInv >= 0) {
-                connection.query(
-                    `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
-                        if (err) throw err;
+            var validIds = [];
 
-                        for (var i = 0; i < res.length; i++) {
-                            if (selectedId === parseInt(res[i].item_id)) {
-                                connection.query(
-                                    "INSERT INTO cart SET ?", {
-                                        "item_id": res[i].item_id,
-                                        "book_name": res[i].book_name,
-                                        "department_name": res[i].department_name
-                                    }, function (err, res) {
-                                        if (err) throw err;
-                                    }
-                                );
-                            } // NEED AN ELSE FOR INVALID ID INPUTS Q_Q
-                        };
-                    }
-                );
-
-                connection.query(
-                    "UPDATE products SET ? WHERE ?", [
-                        {
-                            "stock_quantity": newInv
-                        },
-                        {
-                            "item_id": selectedId
-                        }
-                    ], function (err, res) {
-                        if (err) throw err;
-                    }
-                );
-
-                connection.query(
-                    `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
-                        if (err) throw err;
-
-                        /* FIX THE MATH HERE*/
-                        var calcAmt = parseFloat(res[0].price_USD) * selectedAmt;
-                        var adjAmt = calcAmt.toFixed(2);
-
-                        connection.query(
-                            "UPDATE cart SET ? WHERE ?", [
-                                {
-                                    "price_USD": adjAmt
-                                },
-                                {
-                                    "item_id": selectedId
-                                }
-                            ], function (err, res) {
-                                if (err) throw err;
-                            }
-                        );
-
-                        connection.query(
-                            "UPDATE cart SET ? WHERE ?", [
-                                {
-                                    "quantity": adjAmt
-                                },
-                                {
-                                    "item_id": selectedId
-                                }
-                            ], function (err, res) {
-                                if (err) throw err;
-
-                                shopOptions();
-                            }
-                        );
-                    }
-                );
-            } else {
-                reviseEntry();
+            for (var i = 0; i < res.length; i++) {
+                validIds.push(parseInt(res[i].item_id));
             };
+
+            connection.query(
+                `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
+                    if (err) throw err;
+
+                    var adjInv = parseInt(res[0].stock_quantity) - selectedAmt;
+
+                    connection.query(
+                        `SELECT COUNT(item_id) AS item_id FROM cart WHERE item_id = ${selectedId}`, function (err, res) {
+                            if (err) throw err;
+
+                            var idExistCost = res[0].item_id;
+                            var validIndex = validIds.indexOf(selectedId);
+
+                            if (validIndex !== -1 && adjInv >= 0 && idExistCost === 0) {
+                                addingToCart(selectedId, selectedAmt, adjInv);
+                            } else if (validIndex !== -1 && adjInv >= 0 && idExistCost !== 0) {
+                                alreadyInCart(selectedId, selectedAmt, adjInv);
+                            } else if (validIndex === -1 && adjInv >= 0) {
+                                reviseId();
+                            } else if (validIndex !== -1 && adjInv < 0) {
+                                reviseAmt();
+                            } else if (validIndex === -1 && adjInv < 0) {
+                                reviseBoth();
+                            } else {
+                                return;
+                            };
+                        }
+                    );
+                }
+            );
         }
     );
+}
+
+function addingToCart(selectedId, selectedAmt, adjInv) {
+    connection.query(
+        "UPDATE products SET ? WHERE ?", [
+            {
+                "stock_quantity": adjInv
+            },
+            {
+                "item_id": selectedId
+            }
+        ], function (err, res) {
+            if (err) throw err;
+        }
+    );
+
+    connection.query(
+        `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
+            if (err) throw err;
+
+            for (var i = 0; i < res.length; i++) {
+                connection.query(
+                    "INSERT INTO cart SET ?", {
+                        "item_id": res[i].item_id,
+                        "book_name": res[i].book_name,
+                        "department_name": res[i].department_name
+                    }, function (err, res) {
+                        if (err) throw err;
+                    }
+                );
+            }
+        }
+    );
+
+    connection.query(
+        `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
+            if (err) throw err;
+
+            var calcAmt = parseFloat(res[0].price_USD) * selectedAmt;
+            var adjAmt = calcAmt.toFixed(2);
+
+            connection.query(
+                "UPDATE cart SET ? WHERE ?", [
+                    {
+                        "price_USD": adjAmt
+                    },
+                    {
+                        "item_id": selectedId
+                    }
+                ], function (err, res) {
+                    if (err) throw err;
+                }
+            );
+
+            connection.query(
+                "UPDATE cart SET ? WHERE ?", [
+                    {
+                        "quantity": selectedAmt
+                    },
+                    {
+                        "item_id": selectedId
+                    }
+                ], function (err, res) {
+                    if (err) throw err;
+
+                    shopOptions();
+                }
+            );
+        }
+    );
+}
+
+function alreadyInCart(selectedId, selectedAmt, adjInv) {
+    connection.query(
+        "UPDATE products SET ? WHERE ?", [
+            {
+                "stock_quantity": adjInv
+            },
+            {
+                "item_id": selectedId
+            }
+        ], function (err, res) {
+            if (err) throw err;
+        }
+    );
+
+    connection.query(
+        `SELECT * FROM cart WHERE item_id = ${selectedId}`, function (err, res) {
+            if (err) throw err;
+
+            var subQuantity = parseInt(res[0].quantity);
+            var updQuantity = subQuantity + selectedAmt;
+
+            connection.query(
+                `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
+                    if (err) throw err;
+
+                    var updPrice = (parseFloat(res[0].price_USD) * updQuantity).toFixed(2);
+
+                    connection.query(
+                        "UPDATE cart SET ? WHERE ?", [
+                            {
+                                "quantity": updQuantity
+                            },
+                            {
+                                "item_id": selectedId
+                            }
+                        ], function (err, res) {
+                            if (err) throw err;
+
+                        }
+                    );
+
+                    connection.query(
+                        "UPDATE cart SET ? WHERE ?", [
+                            {
+                                "price_USD": updPrice
+                            },
+                            {
+                                "item_id": selectedId
+                            }
+                        ], function (err, res) {
+                            if (err) throw err;
+
+                            shopOptions();
+                        }
+                    );
+                }
+            );
+        }
+    );
+}
+
+function reviseId() {
+    inquirer.prompt([
+        {
+            type: 'list',
+            message: "\n\nThe 'Book ID' you entered does not exist in our catalogue. Please enter a valid ID. \n",
+            name: 'revise',
+            choices: ["Go back"]
+        }
+    ]).then(function (response) {
+        if (response.revise === "Go back") {
+            goShop();
+        }
+    });
+}
+
+function reviseAmt() {
+    inquirer.prompt([
+        {
+            type: 'list',
+            message: '\n\nThe quantity entered exceeds the availability of the selected product! Please revise your input. \n',
+            name: 'revise',
+            choices: ["Go back"]
+        }
+    ]).then(function (response) {
+        if (response.revise === "Go back") {
+            goShop();
+        }
+    });
+}
+
+function reviseBoth() {
+    inquirer.prompt([
+        {
+            type: 'list',
+            message: "\n\nYour inputs for a 'Book ID' and the quantity are both invalid! Please revise your entries. \n",
+            name: 'revise',
+            choices: ["Go back"]
+        }
+    ]).then(function (response) {
+        if (response.revise === "Go back") {
+            goShop();
+        }
+    });
 }
 
 function shopOptions() {
@@ -226,21 +361,6 @@ function shopOptions() {
     });
 }
 
-function reviseEntry() {
-    inquirer.prompt([
-        {
-            type: 'list',
-            message: "\n\nThe amount you've entered exceeds the stock availability of the product! Please revise your entries. \n",
-            name: 'backtolist',
-            choices: ["Back to products"]
-        }
-    ]).then(function (response) {
-        if (response.backtolist === "Back to products") {
-            goShop();
-        }
-    });
-}
-
 function goToCart() {
     connection.query(
         "SELECT * FROM cart", function (err, res) {
@@ -250,21 +370,101 @@ function goToCart() {
 
             console.log("\nYour shopping cart: ");
 
-            for (var i = 0; i < res.length; i++) {
-                /* FIX THE MATH HERE*/
-                var qCost = parseFloat(res[i].price_USD) * parseInt(res[i].quantity);
-                var adjCost = qCost.toFixed(2);
+            var subt = [];
 
-                console.log(`\nBook ID: ${res[i].item_id} \nTitle: ${res[i].book_name} \nSeries: ${res[i].department_name} \nPrice: $${adjCost} \nQuantity: ${res[i].quantity} \n`);
+            for (var i = 0; i < res.length; i++) {
+                subt.push(res[i].price_USD);
+
+                var adjCost = (res[i].price_USD).toFixed(2);
+
+                console.log(`\nBook ID: ${res[i].item_id} \nTitle: "${res[i].book_name}" \nSeries: ${res[i].department_name} \nPrice: $${adjCost} \nQuantity: ${res[i].quantity} \n`);
             };
+
+            function getSum(total, num) {
+                return total + num;
+            }
+
+            var subtotal = (subt.reduce(getSum)).toFixed(2);
+
+            console.log(`\n\nSubtotal:  $ ${subtotal} \nShipping:  FREE`);
+
+            shoppingCart();
         }
     );
 }
 
-function editCart() {
-
+function shoppingCart() {
+    inquirer.prompt([
+        {
+            type: 'list',
+            message: '\n\nWhat would you like to do? ',
+            name: 'options',
+            choices: ["Keep shopping", "Remove an item", "Checkout"]
+        }
+    ]).then(function (response) {
+        if (response.options === "Keep shopping") {
+            goShop();
+        } else if (response.options === "Remove an item") {
+            removeItemId();
+        } else {
+            checkOut();
+        };
+    });
 }
 
+function removeItemId() {
+    inquirer.prompt([
+        {
+            type: 'input',
+            message: "\nEnter the 'Book ID' of the item to remove from cart: ",
+            name: 'id',
+            validate: function validateInput(name) {
+                return name !== '';
+            }
+        },
+        {
+            type: 'input',
+            message: '\nQuantity desired: ',
+            name: 'quantity',
+            validate: function validateInput(name) {
+                return name !== '';
+            }
+        }
+    ]).then(function (response) {
+        var removeId = parseInt(response.id);
+        var removeAmt = parseInt(response.quantity);
+
+        connection.query(
+            "SELECT item_id FROM cart", function (err, res) {
+                if (err) throw err;
+
+                var deleteCheck = [];
+
+                for (var i = 0; i < res.length; i++) {
+                    deleteCheck.push(parseInt(res[i].item_id));
+                };
+
+                connection.query(
+                    `SELECT * FROM cart WHERE item_id = ${removeId}`, function (err, res) {
+                        if (err) throw err;
+                        var deleteId = parseInt(res[0].item_id);
+                        var subQ = parseInt(res[0].quantity);
+                        var adjQ = subQ - removeAmt;
+                        var adjPrice = parseFloat(res[0].price_USD);
+
+                        console.log(deleteId);
+                        console.log(subQ);
+                        console.log(adjQ);
+                        console.log(adjPrice);
+
+                        // REVERSE ENGINEER SUBTRACTING CART
+                        // UPDATE FIELDS BASED ON USER INPUT FOR BOTH CART AND PRODUCTS
+                    }
+                )
+            }
+        );
+    });
+}
 
 function checkOut() {
 
