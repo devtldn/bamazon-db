@@ -68,7 +68,7 @@ function contactSupp() {
     inquirer.prompt([
         {
             type: 'list',
-            message: 'Contact Us \n\nFor any inquiries, concerns, and/or feedback, feel free to contact us using our toll-free number at +1 (800) 555-5555. \nThank you for choosing  ʙ ᴀ ᴍ ᴀ ᴢ ᴏ ɴ ™  as we look forward to hearing from you! \n',
+            message: 'Contact Us \n\nFor any inquiries, concerns, and/or feedback, feel free to contact us using our toll-free number at +1 (800) 555-5555. \n\nThank you for choosing  ʙ ᴀ ᴍ ᴀ ᴢ ᴏ ɴ ™  as we look forward to hearing from you! \n',
             name: 'support',
             choices: ["Go back"]
         }
@@ -127,46 +127,42 @@ function verifyCart(selectedId, selectedAmt) {
     connection.query(
         "SELECT item_id FROM products", function (err, res) {
             if (err) throw err;
-            
-            var adjInv;
+
             var validIds = [];
-            var validIndex = validIds.indexOf(selectedId);
 
             for (var i = 0; i < res.length; i++) {
                 validIds.push(parseInt(res[i].item_id));
             };
 
-            if (validIndex === -1 && adjInv >= 0) {
-                reviseId();
-            } else if (validIndex !== -1 && adjInv < 0) {
-                reviseAmt();
-            } else if (validIndex === -1 && adjInv < 0) {
-                reviseBoth();
-            } else {
-                connection.query(
-                    `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
-                        if (err) throw err;
+            var validIndex = validIds.indexOf(selectedId);
 
-                        adjInv = parseInt(res[0].stock_quantity) - selectedAmt;
+            connection.query(
+                `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
+                    if (err) throw err;
 
-                        if (adjInv >= 0) {
-                            connection.query(
-                                `SELECT COUNT(item_id) AS item_id FROM cart WHERE item_id = ${selectedId}`, function (err, res) {
-                                    if (err) throw err;
+                    var adjInv = parseInt(res[0].stock_quantity) - selectedAmt;
 
-                                    var idExistCost = res[0].item_id;
+                    connection.query(
+                        `SELECT COUNT(item_id) AS item_id FROM cart WHERE item_id = ${selectedId}`, function (err, res) {
+                            if (err) throw err;
 
-                                    if (validIndex !== -1 && adjInv >= 0 && idExistCost === 0) {
-                                        addingToCart(selectedId, selectedAmt, adjInv);
-                                    } else if (validIndex !== -1 && adjInv >= 0 && idExistCost !== 0) {
-                                        alreadyInCart(selectedId, selectedAmt, adjInv);
-                                    };
-                                }
-                            );
+                            var existByCount = res[0].item_id;
+
+                            if (validIndex !== -1 && adjInv >= 0 && existByCount === 0) {
+                                addingToCart(selectedId, selectedAmt, adjInv);
+                            } else if (validIndex !== -1 && adjInv >= 0 && existByCount !== 0) {
+                                alreadyInCart(selectedId, selectedAmt, adjInv);
+                            } else if (validIndex === -1 && adjInv >= 0) {
+                                reviseId();
+                            } else if (validIndex !== -1 && adjInv < 0) {
+                                reviseAmt();
+                            } else if (validIndex === -1 && adjInv < 0) {
+                                reviseBoth();
+                            };
                         }
-                    }
-                );
-            }
+                    );
+                }
+            );
         }
     );
 }
@@ -386,6 +382,8 @@ function goToCart() {
             console.log(`\n\nSubtotal:  $ ${subtotal} \nShipping:  FREE`);
 
             shoppingCart();
+
+            // NEED TO DO CHECKOUT
         }
     );
 }
@@ -396,12 +394,12 @@ function shoppingCart() {
             type: 'list',
             message: '\n\nWhat would you like to do? ',
             name: 'options',
-            choices: ["Keep shopping", "Remove an item", "Checkout"]
+            choices: ["Keep shopping", "Remove item(s)", "Checkout"]
         }
     ]).then(function (response) {
         if (response.options === "Keep shopping") {
             goShop();
-        } else if (response.options === "Remove an item") {
+        } else if (response.options === "Remove item(s)") {
             removeItems();
         } else {
             checkOut();
@@ -469,7 +467,7 @@ function removeItems() {
                                                 name: 'update',
                                                 choices: ["Go to cart"]
                                             }
-                                        ]).then(function(response) {
+                                        ]).then(function (response) {
                                             if (response.update === "Go to cart") {
                                                 goToCart();
                                             }
@@ -477,15 +475,15 @@ function removeItems() {
                                     }
                                 );
                             } else {
-                                console.log("\nThe ID you entered is not in your cart. Please revise your entries.");
+                                console.log("\nThe quantity entered exceeds the amount available in your cart. Please revise your entries.");
 
                                 removeItems();
                             };
                         }
                     );
                 } else {
-                    console.log("\nThe quantity exceeds your ");
-                    
+                    console.log("\nThe ID you entered is not in your cart. Please revise your entries.");
+
                     removeItems();
                 };
             }
@@ -497,47 +495,41 @@ function balanceProdCart(removeId, removeAmt, adjProdPrice, updCartQty, subCartQ
     connection.query(
         "UPDATE cart SET ? WHERE ?", [
             {
-                "price_USD": adjProdPrice
+                "price_USD": adjProdPrice,
+                "quantity" : updCartQty
             },
             {
                 "item_id": removeId
             }
         ], function (err, res) {
             if (err) throw err;
+        }
+    );
 
-            connection.query(
-                "UPDATE cart SET ? WHERE ?", [
-                    {
-                        "quantity": updCartQty
-                    },
-                    {
-                        "item_id": removeId
+    connection.query(
+        `SELECT * FROM cart WHERE item_id = ${removeId}`, function (err, res) {
+            if (err) throw err;
+
+            if (res[0].quantity === 0) {
+                connection.query(
+                    `DELETE FROM cart WHERE item_id = ${removeId}`, function (err, res) {
+                        if (err) throw err;
                     }
-                ], function (err, res) {
-                    if (err) throw err;
+                );
+            };
+        }
+    );
 
-                    if (subCartQty === 0) {
-                        connection.query(
-                            `DELETE FROM cart WHERE item_id = ${removeAmt}`, function (err, res) {
-                                if (err) throw err;
-
-                                connection.query(
-                                    "UPDATE products SET ? WHERE ?", [
-                                        {
-                                            "stock_quantity": updProdQty
-                                        },
-                                        {
-                                            "item_id": removeId
-                                        }
-                                    ], function (err, res) {
-                                        if (err) throw err;
-                                    }
-                                );
-                            }
-                        );
-                    };
-                }
-            );
+    connection.query(
+        "UPDATE products SET ? WHERE ?", [
+            {
+                "stock_quantity": updProdQty
+            },
+            {
+                "item_id": removeId
+            }
+        ], function (err, res) {
+            if (err) throw err;
         }
     );
 }
