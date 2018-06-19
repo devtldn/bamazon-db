@@ -127,43 +127,46 @@ function verifyCart(selectedId, selectedAmt) {
     connection.query(
         "SELECT item_id FROM products", function (err, res) {
             if (err) throw err;
-
+            
+            var adjInv;
             var validIds = [];
+            var validIndex = validIds.indexOf(selectedId);
 
             for (var i = 0; i < res.length; i++) {
                 validIds.push(parseInt(res[i].item_id));
             };
 
-            connection.query(
-                `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
-                    if (err) throw err;
+            if (validIndex === -1 && adjInv >= 0) {
+                reviseId();
+            } else if (validIndex !== -1 && adjInv < 0) {
+                reviseAmt();
+            } else if (validIndex === -1 && adjInv < 0) {
+                reviseBoth();
+            } else {
+                connection.query(
+                    `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
+                        if (err) throw err;
 
-                    var adjInv = parseInt(res[0].stock_quantity) - selectedAmt;
+                        adjInv = parseInt(res[0].stock_quantity) - selectedAmt;
 
-                    connection.query(
-                        `SELECT COUNT(item_id) AS item_id FROM cart WHERE item_id = ${selectedId}`, function (err, res) {
-                            if (err) throw err;
+                        if (adjInv >= 0) {
+                            connection.query(
+                                `SELECT COUNT(item_id) AS item_id FROM cart WHERE item_id = ${selectedId}`, function (err, res) {
+                                    if (err) throw err;
 
-                            var idExistCost = res[0].item_id;
-                            var validIndex = validIds.indexOf(selectedId);
+                                    var idExistCost = res[0].item_id;
 
-                            if (validIndex !== -1 && adjInv >= 0 && idExistCost === 0) {
-                                addingToCart(selectedId, selectedAmt, adjInv);
-                            } else if (validIndex !== -1 && adjInv >= 0 && idExistCost !== 0) {
-                                alreadyInCart(selectedId, selectedAmt, adjInv);
-                            } else if (validIndex === -1 && adjInv >= 0) {
-                                reviseId();
-                            } else if (validIndex !== -1 && adjInv < 0) {
-                                reviseAmt();
-                            } else if (validIndex === -1 && adjInv < 0) {
-                                reviseBoth();
-                            } else {
-                                return;
-                            };
+                                    if (validIndex !== -1 && adjInv >= 0 && idExistCost === 0) {
+                                        addingToCart(selectedId, selectedAmt, adjInv);
+                                    } else if (validIndex !== -1 && adjInv >= 0 && idExistCost !== 0) {
+                                        alreadyInCart(selectedId, selectedAmt, adjInv);
+                                    };
+                                }
+                            );
                         }
-                    );
-                }
-            );
+                    }
+                );
+            }
         }
     );
 }
@@ -186,6 +189,9 @@ function addingToCart(selectedId, selectedAmt, adjInv) {
         `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
             if (err) throw err;
 
+            var calcAmt = parseFloat(res[0].price_USD) * selectedAmt;
+            var adjAmt = calcAmt.toFixed(2);
+
             for (var i = 0; i < res.length; i++) {
                 connection.query(
                     "INSERT INTO cart SET ?", {
@@ -196,16 +202,7 @@ function addingToCart(selectedId, selectedAmt, adjInv) {
                         if (err) throw err;
                     }
                 );
-            }
-        }
-    );
-
-    connection.query(
-        `SELECT * FROM products WHERE item_id = ${selectedId}`, function (err, res) {
-            if (err) throw err;
-
-            var calcAmt = parseFloat(res[0].price_USD) * selectedAmt;
-            var adjAmt = calcAmt.toFixed(2);
+            };
 
             connection.query(
                 "UPDATE cart SET ? WHERE ?", [
@@ -405,14 +402,14 @@ function shoppingCart() {
         if (response.options === "Keep shopping") {
             goShop();
         } else if (response.options === "Remove an item") {
-            removeItemId();
+            removeItems();
         } else {
             checkOut();
         };
     });
 }
 
-function removeItemId() {
+function removeItems() {
     inquirer.prompt([
         {
             type: 'input',
@@ -444,26 +441,105 @@ function removeItemId() {
                     deleteCheck.push(parseInt(res[i].item_id));
                 };
 
-                connection.query(
-                    `SELECT * FROM cart WHERE item_id = ${removeId}`, function (err, res) {
-                        if (err) throw err;
-                        var deleteId = parseInt(res[0].item_id);
-                        var subQ = parseInt(res[0].quantity);
-                        var adjQ = subQ - removeAmt;
-                        var adjPrice = parseFloat(res[0].price_USD);
+                var checkIndex = deleteCheck.indexOf(removeId); // checking deleteCheck if exists
 
-                        console.log(deleteId);
-                        console.log(subQ);
-                        console.log(adjQ);
-                        console.log(adjPrice);
+                if (checkIndex !== -1) {
+                    connection.query(
+                        `SELECT * FROM cart WHERE item_id = ${removeId}`, function (err, res) {
+                            if (err) throw err;
 
-                        // REVERSE ENGINEER SUBTRACTING CART
-                        // UPDATE FIELDS BASED ON USER INPUT FOR BOTH CART AND PRODUCTS
-                    }
-                )
+                            var subCartQty = parseInt(res[0].quantity);
+                            var updCartQty = subCartQty - removeAmt;
+
+                            if (updCartQty >= 0) {
+                                connection.query(
+                                    `SELECT * FROM products WHERE item_id = ${removeId}`, function (err, res) {
+                                        if (err) throw err;
+
+                                        var subProdQty = parseFloat(res[0].price_USD);
+                                        var adjProdPrice = (updCartQty * subProdQty).toFixed(2);
+                                        var updProdQty = parseInt(res[0].stock_quantity) + removeAmt;
+
+                                        balanceProdCart(removeId, removeAmt, adjProdPrice, updCartQty, subCartQty, updProdQty);
+
+                                        inquirer.prompt([
+                                            {
+                                                type: 'list',
+                                                message: '\nYour shopping cart has been updated!',
+                                                name: 'update',
+                                                choices: ["Go to cart"]
+                                            }
+                                        ]).then(function(response) {
+                                            if (response.update === "Go to cart") {
+                                                goToCart();
+                                            }
+                                        });
+                                    }
+                                );
+                            } else {
+                                console.log("\nThe ID you entered is not in your cart. Please revise your entries.");
+
+                                removeItems();
+                            };
+                        }
+                    );
+                } else {
+                    console.log("\nThe quantity exceeds your ");
+                    
+                    removeItems();
+                };
             }
         );
     });
+}
+
+function balanceProdCart(removeId, removeAmt, adjProdPrice, updCartQty, subCartQty, updProdQty) {
+    connection.query(
+        "UPDATE cart SET ? WHERE ?", [
+            {
+                "price_USD": adjProdPrice
+            },
+            {
+                "item_id": removeId
+            }
+        ], function (err, res) {
+            if (err) throw err;
+
+            connection.query(
+                "UPDATE cart SET ? WHERE ?", [
+                    {
+                        "quantity": updCartQty
+                    },
+                    {
+                        "item_id": removeId
+                    }
+                ], function (err, res) {
+                    if (err) throw err;
+
+                    if (subCartQty === 0) {
+                        connection.query(
+                            `DELETE FROM cart WHERE item_id = ${removeAmt}`, function (err, res) {
+                                if (err) throw err;
+
+                                connection.query(
+                                    "UPDATE products SET ? WHERE ?", [
+                                        {
+                                            "stock_quantity": updProdQty
+                                        },
+                                        {
+                                            "item_id": removeId
+                                        }
+                                    ], function (err, res) {
+                                        if (err) throw err;
+                                    }
+                                );
+                            }
+                        );
+                    };
+                }
+            );
+        }
+    );
 }
 
 function checkOut() {
